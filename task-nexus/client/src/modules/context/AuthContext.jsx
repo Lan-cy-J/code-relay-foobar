@@ -1,56 +1,53 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import { createContext, useContext, useState, useEffect } from "react";
+import axios from "axios";
 
-const API_BASE = import.meta.env.API_URL || 'http://localhost:5000/api';
-
-const AuthContext = createContext(null);
+const API = "http://localhost:5000/api/auth";
+const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [token, setToken] = useState(localStorage.getItem('nexus_token'));
+    const [token, setToken] = useState(localStorage.getItem("token"));
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (token) {
-            axios.get('http://localhost:5000/api/auth/me', {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-                .then(response => {
-                    setUser(response);
-                })
-                .catch(() => {
-                    setUser(null);
-                })
-                .finally(() => setLoading(false));
-        } else {
+        if (!token) {
             setLoading(false);
+            return;
         }
+
+        axios.get(`${API}/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+        .then(res => setUser(res.data))
+        .catch(() => {
+            localStorage.removeItem("token");
+            setUser(null);
+        })
+        .finally(() => setLoading(false));
     }, [token]);
 
-    const login = async (email, password) => {
-        const response = await axios.post('http://localhost:5000/api/auth/login', { email, password });
-        localStorage.setItem('nexus_token', response.data.token);
-        setToken(response.data.token);
-        setUser(response.data.user);
-        return response.data;
+    const register = async (username, email, password) => {
+        const res = await axios.post(`${API}/register`, { username, email, password });
+        localStorage.setItem("token", res.data.token);
+        setToken(res.data.token);
+        setUser(res.data.user);
     };
 
-    const register = async (username, email, password) => {
-        const response = await axios.post(`${API_BASE}/auth/register`, { username, email, password });
-        localStorage.setItem('nexus_token', response.data.token);
-        setToken(response.data.token);
-        setUser(response.data.user);
-        return response.data;
+    const login = async (email, password) => {
+        const res = await axios.post(`${API}/login`, { email, password });
+        localStorage.setItem("token", res.data.token);
+        setToken(res.data.token);
+        setUser(res.data.user);
     };
 
     const logout = () => {
-        localStorage.removeItem('token');
+        localStorage.removeItem("token");
         setToken(null);
         setUser(null);
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, loading, register, login, logout }}>
             {children}
         </AuthContext.Provider>
     );

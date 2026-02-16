@@ -2,9 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2');
 const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 const JWT_SECRET = 'super-secret-key-123';
 
@@ -23,8 +25,7 @@ db.connect(err => {
     console.log('Connected to database');
 });
 
-
-// ================= REGISTER =================
+// REGISTER
 app.post('/api/auth/register', (req, res) => {
     const { username, email, password } = req.body;
 
@@ -32,10 +33,7 @@ app.post('/api/auth/register', (req, res) => {
         "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
         [username, email, password],
         (err, result) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).json({ error: err.message });
-            }
+            if (err) return res.status(500).json({ error: err.message });
 
             const token = jwt.sign(
                 { id: result.insertId, username, email },
@@ -50,8 +48,7 @@ app.post('/api/auth/register', (req, res) => {
     );
 });
 
-
-// ================= LOGIN =================
+// LOGIN
 app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body;
 
@@ -82,8 +79,7 @@ app.post('/api/auth/login', (req, res) => {
     );
 });
 
-
-// ================= AUTH CHECK =================
+// AUTH CHECK
 app.get('/api/auth/me', (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ error: "No token" });
@@ -100,14 +96,11 @@ app.get('/api/auth/me', (req, res) => {
                 res.json(results[0]);
             }
         );
-    } catch (err) {
+    } catch {
         res.status(401).json({ error: "Invalid token" });
     }
 });
 
-
-// ================= SERVER =================
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+app.listen(process.env.PORT || 5000, () => {
+    console.log("Server running on port 5000");
 });
