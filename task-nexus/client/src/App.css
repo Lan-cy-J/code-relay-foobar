@@ -32,6 +32,19 @@
     background-color: hsl(var(--bg));
 }
 
+.dark {
+    --bg: 222 47% 8%;
+    --bg-secondary: 222 47% 11%;
+    --card: 222 47% 12%;
+    --card-hover: 222 47% 15%;
+    --text: 210 40% 98%;
+    --text-muted: 215 20% 65%;
+    --border: 217 19% 27%;
+    --glass: rgba(20, 20, 25, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-hover: rgba(255, 255, 255, 0.05);
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
