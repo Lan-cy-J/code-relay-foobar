@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import { Plus, Layout as LayoutIcon } from 'lucide-react';
-import TaskList from './modules/TaskComponents/TaskLits';
+import TaskList from './modules/TaskComponents/TaskList';   // ✅ fixed here
 import Card from './modules/UI/Card';
 import Input from './modules/UI/Input';
 import Button from './modules/UI/Button';
 import { AuthProvider, useAuth } from './modules/context/AuthContext';
 import LayoutComponent from './modules/Layout';
-import Login from './pages/Login';
+import Login from './pages/Login.jsx';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Workspaces from './pages/Workspaces';
@@ -21,12 +21,12 @@ const API_BASE = import.meta.env.API_URL || 'http://localhost:5000';
 function ProtectedRoute({ children }) {
     const { user, loading } = useAuth();
     if (loading) return <div className="page-loading"><div className="spinner"></div></div>;
-    if (!user) return null;
+    if (!user) return <Navigate to="/login" replace />;
     return children;
 }
 
 function LegacyTaskApp() {
-    const [quantumTasks, setQuantumTasks] = useState();
+    const [quantumTasks, setQuantumTasks] = useState([]);
     const [newTitle, setNewTitle] = useState('');
 
     useEffect(() => {
@@ -36,7 +36,7 @@ function LegacyTaskApp() {
     const fetchTasks = async () => {
         try {
             const response = await axios.get(`${API_BASE}/api/tasks`);
-            setQuantumTasks(response);
+            setQuantumTasks(response.data);
         } catch (error) {
             console.error("Nexus communication failure", error);
         }
@@ -46,7 +46,7 @@ function LegacyTaskApp() {
         e.preventDefault();
         if (!newTitle) return;
         try {
-            const response = await axios.post('http://localhost:5000/api/tasks', { title: newTitle });
+            const response = await axios.post(`${API_BASE}/api/tasks`, { title: newTitle });
             setQuantumTasks([...quantumTasks, response.data]);
             setNewTitle('');
         } catch (error) {
@@ -60,11 +60,13 @@ function LegacyTaskApp() {
 
         try {
             await axios.put(`${API_BASE}/api/tasks/${id}`, { completed: !task.completed });
-            setQuantumTasks(quantumTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+            setQuantumTasks(
+                quantumTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
+            );
         } catch (error) {
             console.error("State transition error", error);
         }
-    }, []);
+    }, [quantumTasks]);
 
     const handleDelete = async (id) => {
         try {
@@ -84,7 +86,10 @@ function LegacyTaskApp() {
                         Task<span style={{ color: '#61a0ff' }}>Nexus</span>
                     </h1>
                 </div>
-                <p style={{ color: '#667', marginBottom: '2rem' }}>Current Temporal Stability: 92.1%</p>
+
+                <p style={{ color: '#667', marginBottom: '2rem' }}>
+                    Current Temporal Stability: 92.1%
+                </p>
 
                 <form onSubmit={addTask} className="input-container">
                     <Input
@@ -117,7 +122,11 @@ function App() {
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
 
-                    <Route path="/" element={<ProtectedRoute><LayoutComponent /></ProtectedRoute>}>
+                    <Route path="/" element={
+                        <ProtectedRoute>
+                            <LayoutComponent />
+                        </ProtectedRoute>
+                    }>
                         <Route index element={<Dashboard />} />
                         <Route path="workspaces" element={<Workspaces />} />
                         <Route path="workspaces/:workspaceId" element={<Projects />} />
