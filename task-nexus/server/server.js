@@ -6,10 +6,23 @@ const cors = require('cors');
 
 const app = express();
 app.use(express.json());
-app.use(cors());
 
-const JWT_SECRET = 'super-secret-key-123';
+/* ---------- CORS FOR PRODUCTION ---------- */
+app.use(cors({
+    origin: [
+        'https://code-relay-foobar-ruddy.vercel.app',
+        'https://code-relay-foobar-git-main-lan-cy-js-projects.vercel.app',
+        'https://code-relay-foobar-kuyw.onrender.com',
+        'http://localhost:3000'
+    ],
+    methods: ['GET','POST','PUT','DELETE'],
+    credentials: true
+}));
 
+/* ---------- SECRET ---------- */
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-123';
+
+/* ---------- DB CONNECTION ---------- */
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -19,10 +32,15 @@ const db = mysql.createConnection({
 
 db.connect(err => {
     if (err) {
-        console.error('DB connection error:', err);
+        console.error('❌ DB connection error:', err);
         return;
     }
-    console.log('Connected to database');
+    console.log('✅ Connected to database');
+});
+
+/* ---------- HEALTH CHECK (important for Render) ---------- */
+app.get('/', (req, res) => {
+    res.send('🚀 Task Nexus API running');
 });
 
 
@@ -30,23 +48,31 @@ db.connect(err => {
 app.post('/api/auth/register', (req, res) => {
     const { username, email, password } = req.body;
 
+    if (!username || !email || !password)
+        return res.status(400).json({ error: "Missing fields" });
+
     db.query(
         "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
         [username, email, password],
         (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: "Registration failed" });
+            }
 
             const userId = result.insertId;
 
-            // create default workspace
+            /* create workspace automatically */
             db.query(
                 "INSERT INTO workspaces (name, description, owner_id) VALUES (?, ?, ?)",
-                [`${username}'s Workspace`, "Default workspace", userId]
+                [`${username}'s Workspace`, "Default workspace", userId],
+                () => {}
             );
 
             const token = jwt.sign(
                 { id: userId, username, email },
-                JWT_SECRET
+                JWT_SECRET,
+                { expiresIn: '7d' }
             );
 
             res.json({
@@ -66,18 +92,19 @@ app.post('/api/auth/login', (req, res) => {
         "SELECT * FROM users WHERE email = ?",
         [email],
         (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!results.length) return res.status(401).json({ error: "User not found" });
+            if (err) return res.status(500).json({ error: "DB error" });
+            if (!results.length)
+                return res.status(401).json({ error: "User not found" });
 
             const user = results[0];
 
-            if (user.password_hash !== password) {
+            if (user.password_hash !== password)
                 return res.status(401).json({ error: "Wrong password" });
-            }
 
             const token = jwt.sign(
                 { id: user.id, username: user.username, email: user.email },
-                JWT_SECRET
+                JWT_SECRET,
+                { expiresIn: '7d' }
             );
 
             res.json({
@@ -102,7 +129,7 @@ app.get('/api/auth/me', (req, res) => {
             "SELECT id, username, email FROM users WHERE id = ?",
             [decoded.id],
             (err, results) => {
-                if (err) return res.status(500).json({ error: err.message });
+                if (err) return res.status(500).json({ error: "DB error" });
                 res.json(results[0]);
             }
         );
@@ -125,7 +152,7 @@ app.get('/api/workspaces', (req, res) => {
             "SELECT * FROM workspaces WHERE owner_id = ? ORDER BY created_at DESC",
             [user.id],
             (err, results) => {
-                if (err) return res.status(500).json({ error: err.message });
+                if (err) return res.status(500).json({ error: "DB error" });
                 res.json(results);
             }
         );
@@ -135,7 +162,8 @@ app.get('/api/workspaces', (req, res) => {
 });
 
 
+/* ---------- START SERVER ---------- */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
