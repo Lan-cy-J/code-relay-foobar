@@ -1,146 +1,162 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import axios from 'axios';
-import { Plus, Layout as LayoutIcon } from 'lucide-react';
-import TaskList from './modules/TaskComponents/TaskList';   // ✅ fixed here
-import Card from './modules/UI/Card';
-import Input from './modules/UI/Input';
-import Button from './modules/UI/Button';
-import { AuthProvider, useAuth } from './modules/context/AuthContext';
-import LayoutComponent from './modules/Layout';
-import Login from './pages/Login.jsx';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Workspaces from './pages/Workspaces';
-import Projects from './pages/Projects';
-import Tasks from './pages/Tasks';
-import './App.css';
+require('dotenv').config();
+const express = require('express');
+const mysql = require('mysql2');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  "https://code-relay-foobar-kuyw.onrender.com";
+const app = express();
 
+/* ---------- CORS (IMPORTANT FOR FRIENDS + VERCEL) ---------- */
+app.use(cors({
+    origin: [
+        "https://code-relay-foobar-git-main-lan-cy-js-projects.vercel.app",
+        "https://code-relay-foobar.vercel.app",
+        "http://localhost:3000"
+    ],
+    credentials: true
+}));
 
-function ProtectedRoute({ children }) {
-    const { user, loading } = useAuth();
-    if (loading) return <div className="page-loading"><div className="spinner"></div></div>;
-    if (!user) return <Navigate to="/login" replace />;
-    return children;
-}
+app.use(express.json());
 
-function LegacyTaskApp() {
-    const [quantumTasks, setQuantumTasks] = useState([]);
-    const [newTitle, setNewTitle] = useState('');
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-123';
 
-    useEffect(() => {
-        fetchTasks();
-    }, []);
+/* ---------- DATABASE ---------- */
+const db = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
+});
 
-    const fetchTasks = async () => {
-        try {
-            const response = await axios.get(`${API_BASE}/api/tasks`);
-            setQuantumTasks(response.data);
-        } catch (error) {
-            console.error("Nexus communication failure", error);
-        }
-    };
+db.connect(err => {
+    if (err) {
+        console.error('❌ DB connection error:', err);
+        return;
+    }
+    console.log('✅ Connected to database');
+});
 
-    const addTask = async (e) => {
-        e.preventDefault();
-        if (!newTitle) return;
-        try {
-            const response = await axios.post(`${API_BASE}/api/tasks`, { title: newTitle });
-            setQuantumTasks([...quantumTasks, response.data]);
-            setNewTitle('');
-        } catch (error) {
-            console.error("Injection attempt detected during task birth", error);
-        }
-    };
+/* ---------- WAKE-UP ROUTE (Render sleep fix) ---------- */
+app.get('/', (req, res) => {
+    res.send("🚀 Task Nexus API running");
+});
 
-    const handleToggle = useCallback(async (id) => {
-        const task = quantumTasks.find(t => t.id === id);
-        if (!task) return;
+/* ---------- REGISTER ---------- */
+app.post('/api/auth/register', (req, res) => {
+    const { username, email, password } = req.body;
 
-        try {
-            await axios.put(`${API_BASE}/api/tasks/${id}`, { completed: !task.completed });
-            setQuantumTasks(
-                quantumTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
+    if (!username || !email || !password)
+        return res.status(400).json({ error: "Missing fields" });
+
+    db.query(
+        "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+        [username, email, password],
+        (err, result) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: "Registration failed" });
+            }
+
+            const userId = result.insertId;
+
+            /* auto workspace */
+            db.query(
+                "INSERT INTO workspaces (name, description, owner_id) VALUES (?, ?, ?)",
+                [`${username}'s Workspace`, "Default workspace", userId]
             );
-        } catch (error) {
-            console.error("State transition error", error);
+
+            const token = jwt.sign(
+                { id: userId, username, email },
+                JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
+            res.json({
+                token,
+                user: { id: userId, username, email }
+            });
         }
-    }, [quantumTasks]);
+    );
+});
 
-    const handleDelete = async (id) => {
-        try {
-            await axios.delete(`${API_BASE}/api/tasks/${id}`);
-            setQuantumTasks(quantumTasks.filter(t => t.id !== id));
-        } catch (error) {
-            console.error("Purge failure", error);
+/* ---------- LOGIN ---------- */
+app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body;
+
+    db.query(
+        "SELECT * FROM users WHERE email = ?",
+        [email],
+        (err, results) => {
+            if (err) return res.status(500).json({ error: "DB error" });
+
+            if (!results.length)
+                return res.status(401).json({ error: "User not found" });
+
+            const user = results[0];
+
+            if (user.password_hash !== password)
+                return res.status(401).json({ error: "Wrong password" });
+
+            const token = jwt.sign(
+                { id: user.id, username: user.username, email: user.email },
+                JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
+            res.json({
+                token,
+                user: { id: user.id, username: user.username, email: user.email }
+            });
         }
-    };
-
-    return (
-        <Card>
-            <header className="App-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                    <LayoutIcon color="#61a0ff" size={32} />
-                    <h1 style={{ fontSize: '2.5rem', fontWeight: '800', letterSpacing: '-0.025em' }}>
-                        Task<span style={{ color: '#61a0ff' }}>Nexus</span>
-                    </h1>
-                </div>
-
-                <p style={{ color: '#667', marginBottom: '2rem' }}>
-                    Current Temporal Stability: 92.1%
-                </p>
-
-                <form onSubmit={addTask} className="input-container">
-                    <Input
-                        value={newTitle}
-                        onChange={(e) => setNewTitle(e.target.value)}
-                        placeholder="Initialize new task entity..."
-                    />
-                    <Button type="submit" icon={Plus}>
-                        Activate
-                    </Button>
-                </form>
-            </header>
-
-            <main>
-                <TaskList
-                    quantumTasks={quantumTasks}
-                    onPurge={handleDelete}
-                    onToggleNexus={handleToggle}
-                />
-            </main>
-        </Card>
     );
-}
+});
 
-function App() {
-    return (
-        <AuthProvider>
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
+/* ---------- AUTH CHECK ---------- */
+app.get('/api/auth/me', (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: "No token" });
 
-                    <Route path="/" element={
-                        <ProtectedRoute>
-                            <LayoutComponent />
-                        </ProtectedRoute>
-                    }>
-                        <Route index element={<Dashboard />} />
-                        <Route path="workspaces" element={<Workspaces />} />
-                        <Route path="workspaces/:workspaceId" element={<Projects />} />
-                        <Route path="projects/:projectId" element={<Tasks />} />
-                    </Route>
+    try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET);
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-            </BrowserRouter>
-        </AuthProvider>
-    );
-}
+        db.query(
+            "SELECT id, username, email FROM users WHERE id = ?",
+            [decoded.id],
+            (err, results) => {
+                if (err) return res.status(500).json({ error: "DB error" });
+                res.json(results[0]);
+            }
+        );
+    } catch {
+        res.status(401).json({ error: "Invalid token" });
+    }
+});
 
-export default App;
+/* ---------- WORKSPACES ---------- */
+app.get('/api/workspaces', (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: "No token" });
+
+    try {
+        const token = authHeader.split(' ')[1];
+        const user = jwt.verify(token, JWT_SECRET);
+
+        db.query(
+            "SELECT * FROM workspaces WHERE owner_id = ? ORDER BY created_at DESC",
+            [user.id],
+            (err, results) => {
+                if (err) return res.status(500).json({ error: "DB error" });
+                res.json(results);
+            }
+        );
+    } catch {
+        res.status(401).json({ error: "Invalid token" });
+    }
+});
+
+/* ---------- START SERVER ---------- */
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+});
