@@ -16,7 +16,10 @@ import Projects from './pages/Projects';
 import Tasks from './pages/Tasks';
 import './App.css';
 
-const API_BASE = import.meta.env.API_URL || 'http://localhost:5000';
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  "https://code-relay-foobar-kuyw.onrender.com";
+
 
 function ProtectedRoute({ children }) {
     const { user, loading } = useAuth();
