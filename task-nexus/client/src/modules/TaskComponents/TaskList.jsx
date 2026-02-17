@@ -1,5 +1,5 @@
 import React from 'react';
-import TaskItem from './taskItem';
+import TaskItem from './taskitem';
 
 const TaskList = ({ quantumTasks, onPurge, onToggleNexus }) => {
     if (quantumTasks === null) {
